@@ -7,3 +7,5 @@ for key, value in new_list2.items():
 
     print (f"Idę do {key}, kupuje tu następujące rzeczy: {value}")
 length = len(list["piekarnia"])+len(list["warzywniak"])
+
+print(f"W sumie kupuje: {length} produktów")
