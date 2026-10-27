@@ -166,6 +166,56 @@ def test_insufficient_cash() -> None:
     assert affordable.positions[0].quantity == _ONE
 
 
+def test_negative_starting_cash_is_rejected_before_processing() -> None:
+    orders = [_tx("1", side="sell", quantity="1", price="10")]
+    with pytest.raises(ValidationError):
+        calculate(orders, {}, Decimal("-0.01"))
+    with pytest.raises(ValidationError):
+        calculate(cast(list[Transaction], [object()]), {}, -1)
+
+
+def test_zero_starting_cash_is_allowed() -> None:
+    report = calculate([], {}, Decimal("0"))
+    assert report == PortfolioReport(
+        positions=(),
+        cash=Decimal("0.00"),
+        realized_pnl=Decimal("0.00"),
+        unrealized_pnl=Decimal("0.00"),
+        total_equity=Decimal("0.00"),
+    )
+
+
+def test_sell_fee_cannot_drive_cash_negative() -> None:
+    buy = _tx("1", quantity="1", price="10")
+    sell = _tx("2", side="sell", quantity="1", price="10", fee="200")
+    orders = [buy, sell]
+    snapshot = list(orders)
+    prices = _prices(("AAA", Decimal("10")))
+    with pytest.raises(InsufficientCashError) as caught:
+        calculate(orders, prices, Decimal("100"))
+    assert caught.value.transaction_id == "2"
+    assert caught.value.available == Decimal("90")
+    assert caught.value.required == Decimal("190")
+    assert orders == snapshot
+    assert orders[0] is buy
+    assert orders[1] is sell
+
+    opened = calculate([buy], prices, Decimal("100"))
+    assert opened.cash == Decimal("90.00")
+    assert opened.positions[0].quantity == _ONE
+
+    exact_zero = calculate(
+        [
+            _tx("1", quantity="1", price="10"),
+            _tx("2", side="sell", quantity="1", price="10", fee="100"),
+        ],
+        {},
+        Decimal("100"),
+    )
+    assert exact_zero.positions == ()
+    assert exact_zero.cash == Decimal("0.00")
+
+
 def test_insufficient_cash_includes_fee() -> None:
     with pytest.raises(InsufficientCashError):
         calculate(

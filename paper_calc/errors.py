@@ -14,7 +14,7 @@ class ValidationError(PaperCalcError):
 
 
 class InsufficientCashError(PaperCalcError):
-    """A buy, including its fee, costs more cash than the portfolio holds."""
+    """A buy or sell would leave cash negative."""
 
     def __init__(
         self,
@@ -29,7 +29,7 @@ class InsufficientCashError(PaperCalcError):
         self.required: Decimal = required
         self.available: Decimal = available
         super().__init__(
-            f"Insufficient cash for transaction {transaction_id!r} buying {ticker}: "
+            f"Insufficient cash for transaction {transaction_id!r} on {ticker}: "
             f"required {required}, available {available}"
         )
 

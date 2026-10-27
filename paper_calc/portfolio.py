@@ -111,7 +111,15 @@ def _apply_sell(
             requested=tx.quantity,
             available=available,
         )
-    updated_cash = cash + tx.quantity * tx.price - tx.fee
+    proceeds = tx.quantity * tx.price
+    updated_cash = cash + proceeds - tx.fee
+    if updated_cash < 0:
+        raise InsufficientCashError(
+            transaction_id=tx.id,
+            ticker=tx.ticker,
+            required=tx.fee - proceeds,
+            available=cash,
+        )
     updated_realized = realized + tx.quantity * (tx.price - existing.avg_cost) - tx.fee
     remaining = existing.quantity - tx.quantity
     if remaining == 0:
@@ -195,24 +203,36 @@ def _build_report(
     )
 
 
+def _starting_cash(value: object) -> Decimal:
+    """Coerce opening cash and reject a negative balance before any trades."""
+    cash = _coerce_decimal(value, field="starting_cash")
+    if cash < 0:
+        raise ValidationError(
+            f"starting_cash must be greater than or equal to 0, got {cash}"
+        )
+    return cash
+
+
 def calculate(
     transactions: Iterable[Transaction],
     current_prices: Mapping[str, DecimalInput],
     starting_cash: DecimalInput = Decimal("2000.00"),
 ) -> PortfolioReport:
-    """Value a paper portfolio after applying ``transactions`` in order.
+    """Value a paper portfolio.
 
-    The function is pure: it copies its inputs, keeps books in local
-    variables, and either returns a complete report or raises. A repeated
-    transaction id with the same normalized content is skipped. The same id
-    with different content raises :class:`DuplicateTransactionError`.
+    ``transactions`` must be supplied in chronological order. They are
+    processed in exactly the given order. The function is pure: it copies
+    its inputs, keeps books in local variables, and either returns a complete
+    report or raises. A repeated transaction id with the same normalized
+    content is skipped. The same id with different content raises
+    :class:`DuplicateTransactionError`.
 
     Money math runs in a local ``decimal`` context with precision 28 and
     ``ROUND_HALF_UP``. Only the returned report is quantized (money to 0.01,
     average cost to 0.0001).
     """
+    cash = _starting_cash(starting_cash)
     orders = _as_transactions(transactions)
-    cash = _coerce_decimal(starting_cash, field="starting_cash")
     seen: dict[str, Transaction] = {}
     lots: dict[str, _Lot] = {}
     realized = Decimal("0")
